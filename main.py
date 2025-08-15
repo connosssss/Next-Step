@@ -3,7 +3,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import StandardScaler
+
 import pandas as pd
+
 
 
 ticker = "AAPL"
@@ -43,11 +46,18 @@ xTrainFlat = xTrain.reshape(xTrain.shape[0], -1)
 xTestFlat = xTest.reshape(xTest.shape[0], -1)
 
 
+scaler = StandardScaler()
+xTrain = scaler.fit_transform(xTrainFlat)
+xTest = scaler.transform(xTestFlat)
+
+
 
 linearModel = LinearRegression()
 linearModel.fit(xTrainFlat, yTrain)
 
-rfModel = RandomForestRegressor(n_estimators=500, random_state=42)
+rfModel = RandomForestRegressor(n_estimators=500, random_state=42,
+                                max_features='sqrt', n_jobs=-1,
+                                 min_samples_leaf=2, min_samples_split=5)
 rfModel.fit(xTrainFlat, yTrain)
 
 
