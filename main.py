@@ -2,6 +2,7 @@ import yfinance as yf
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
 import pandas as pd
 
 
@@ -41,22 +42,35 @@ print(f"Training samples: {len(xTrain)}, Test samples: {len(xTest)}")
 xTrainFlat = xTrain.reshape(xTrain.shape[0], -1)
 xTestFlat = xTest.reshape(xTest.shape[0], -1)
 
-model = LinearRegression()
-model.fit(xTrainFlat, yTrain)
 
 
-yPrediction = model.predict(xTestFlat)
+linearModel = LinearRegression()
+linearModel.fit(xTrainFlat, yTrain)
+
+rfModel = RandomForestRegressor(n_estimators=500, random_state=42)
+rfModel.fit(xTrainFlat, yTrain)
+
+
+yPrediction = linearModel.predict(xTestFlat)
+rfPrediction = rfModel.predict(xTestFlat)
 lastSequence = y[-length:].copy()
 futurePrediction = []
 
 for i in range(futureAmount):
-    pred = model.predict(lastSequence.reshape(1, -1))
+    pred = linearModel.predict(lastSequence.reshape(1, -1))
     futurePrediction.append(pred[0])
     
 
     lastSequence = np.append(lastSequence[1:], pred[0])
 
 
+rfLastSequence = y[-length:].copy()
+rfFuturePrediction = []
+
+for i in range(futureAmount):
+    predRF = rfModel.predict(rfLastSequence.reshape(1, -1))
+    rfFuturePrediction.append(predRF[0])
+    rfLastSequence = np.append(rfLastSequence[1:], predRF[0])
 
 plt.figure(figsize=(12, 6))
 plt.plot(stock.index, stock['Close'], label='Actual Price', color='blue')
@@ -67,6 +81,7 @@ endIndex = startIndex + len(yPrediction)
 if endIndex <= len(stock.index):
     test_dates = stock.index[startIndex:endIndex]
     plt.scatter(test_dates, yPrediction, color='red', label='Test Predictions', alpha=0.6, s=20)
+    plt.scatter(test_dates, rfPrediction, color='green', label='Test Predictions', alpha=0.6, s=20)
 
 
 
@@ -74,7 +89,7 @@ if endIndex <= len(stock.index):
 
 futureDates = pd.date_range(start=stock.index[-1] + pd.Timedelta(days=1), periods=futureAmount, freq='D')
 plt.plot(futureDates, futurePrediction, 'r--', label=f'Future Predictions', linewidth=2)
-
+plt.plot(futureDates, rfFuturePrediction, 'g--', label=f'Random Forest Future', linewidth=2)
 
 plt.title(f'{ticker} Stock Price Prediction (Sequence-based)')
 plt.xlabel('Date')
@@ -83,5 +98,6 @@ plt.legend()
 plt.xticks(rotation=45)
 plt.tight_layout()
 plt.savefig('stock_prediction.png', dpi=300, bbox_inches='tight')
-print(f"Model Score (RÂ²): {model.score(xTestFlat, yTest)}")
+print(f"Linear R^2: {linearModel.score(xTestFlat, yTest)}")
+print(f"RF R^2: {rfModel.score(xTestFlat, yTest)}")
 plt.show()
