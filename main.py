@@ -14,6 +14,13 @@ stock = yf.download(ticker, period="1y")
 y = stock['Close'].values
 
 
+stock['Price_Range'] = stock['High'] - stock['Low']
+stock['Volume_Price'] = stock['Volume'] * stock['Close']
+stock['Adj_Close_MA3'] = stock['Close'].rolling(window=3).mean()
+
+rfData = stock[['Open', 'High', 'Low', 'Close', 'Volume', 'Price_Range', 'Volume_Price', 'Adj_Close_MA3']].fillna(method='bfill').values
+
+
 length = 60
 futureAmount = 60 
 
@@ -25,9 +32,16 @@ def createSequences(data, length=60):
         y.append(data[i])
     return np.array(X), np.array(y)
 
+def createRFSequences(data, target, length=60):
+    X, y = [], []
+    for i in range(length, len(data)):
+        X.append(data[i-length:i])
+        y.append(target[i])
+    return np.array(X), np.array(y)
 
 
 sequenceX, sequenceY = createSequences(y, length)
+rfSequenceX, rfSequenceY = createRFSequences(rfData, y, length)
 print(f"Sequences created: {len(sequenceX)} samples")
 
 
@@ -40,10 +54,16 @@ splitIndex = int(len(sequenceX) * 0.7)
 xTrain, xTest = sequenceX[:splitIndex], sequenceX[splitIndex:]
 yTrain, yTest = sequenceY[:splitIndex], sequenceY[splitIndex:]
 
+rfXTrain, rfXTest = rfSequenceX[:splitIndex], rfSequenceX[splitIndex:]
+rfYTrain, rfYTest = rfSequenceY[:splitIndex], rfSequenceY[splitIndex:]
+
 print(f"Training samples: {len(xTrain)}, Test samples: {len(xTest)}")
 
 xTrainFlat = xTrain.reshape(xTrain.shape[0], -1)
 xTestFlat = xTest.reshape(xTest.shape[0], -1)
+
+rfXTrainFlat = rfXTrain.reshape(rfXTrain.shape[0], -1)
+rfXTestFlat = rfXTest.reshape(rfXTest.shape[0], -1)
 
 
 scaler = StandardScaler()
@@ -55,14 +75,15 @@ xTest = scaler.transform(xTestFlat)
 linearModel = LinearRegression()
 linearModel.fit(xTrainFlat, yTrain)
 
-rfModel = RandomForestRegressor(n_estimators=500, random_state=42,
-                                max_features='sqrt', n_jobs=-1,
-                                 min_samples_leaf=2, min_samples_split=5)
-rfModel.fit(xTrainFlat, yTrain)
+rfModel = RandomForestRegressor(n_estimators=1000, random_state=42,
+                                max_features=0.6, n_jobs=-1,
+                                 min_samples_leaf=3, min_samples_split=8,
+                                 max_depth=20 )
+rfModel.fit(rfXTrainFlat, rfYTrain)
 
 
 yPrediction = linearModel.predict(xTestFlat)
-rfPrediction = rfModel.predict(xTestFlat)
+rfPrediction = rfModel.predict(rfXTestFlat)
 lastSequence = y[-length:].copy()
 futurePrediction = []
 
@@ -74,13 +95,16 @@ for i in range(futureAmount):
     lastSequence = np.append(lastSequence[1:], pred[0])
 
 
-rfLastSequence = y[-length:].copy()
+rfLastSequence = rfData[-length:].copy()
 rfFuturePrediction = []
 
 for i in range(futureAmount):
     predRF = rfModel.predict(rfLastSequence.reshape(1, -1))
     rfFuturePrediction.append(predRF[0])
-    rfLastSequence = np.append(rfLastSequence[1:], predRF[0])
+    
+    newRow = rfLastSequence[-1].copy()
+    newRow[3] = predRF[0] 
+    rfLastSequence = np.append(rfLastSequence[1:], [newRow], axis=0)
 
 plt.figure(figsize=(12, 6))
 plt.plot(stock.index, stock['Close'], label='Actual Price', color='blue')
@@ -109,5 +133,5 @@ plt.xticks(rotation=45)
 plt.tight_layout()
 plt.savefig('stock_prediction.png', dpi=300, bbox_inches='tight')
 print(f"Linear R^2: {linearModel.score(xTestFlat, yTest)}")
-print(f"RF R^2: {rfModel.score(xTestFlat, yTest)}")
+print(f"RF R^2: {rfModel.score(rfXTestFlat, rfYTest)}")
 plt.show()
