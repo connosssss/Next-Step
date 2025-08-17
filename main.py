@@ -4,13 +4,13 @@ import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
-
+from sklearn.model_selection import RandomizedSearchCV, TimeSeriesSplit
 import pandas as pd
 
 
 
 ticker = "AAPL"
-stock = yf.download(ticker, period="1y")
+stock = yf.download(ticker, period="2y")
 y = stock['Close'].values
 
 
@@ -70,7 +70,9 @@ scaler = StandardScaler()
 xTrain = scaler.fit_transform(xTrainFlat)
 xTest = scaler.transform(xTestFlat)
 
-
+rfScaler = StandardScaler()
+rfXTrain = rfScaler.fit_transform(rfXTrainFlat)
+rfXTest = rfScaler.transform(rfXTestFlat)
 
 linearModel = LinearRegression()
 linearModel.fit(xTrainFlat, yTrain)
@@ -89,7 +91,7 @@ search.fit(rfXTrain, rfYTrain)
 rfModel = search.best_estimator_
 
 yPrediction = linearModel.predict(xTestFlat)
-rfPrediction = rfModel.predict(rfXTestFlat)
+rfPrediction = rfModel.predict(rfXTest)
 lastSequence = y[-length:].copy()
 futurePrediction = []
 
@@ -105,7 +107,7 @@ rfLastSequence = rfData[-length:].copy()
 rfFuturePrediction = []
 
 for i in range(futureAmount):
-    predRF = rfModel.predict(rfLastSequence.reshape(1, -1))
+    predRF = rfModel.predict(rfScaler.transform(rfLastSequence.reshape(1, -1)))
     rfFuturePrediction.append(predRF[0])
     
     newRow = rfLastSequence[-1].copy()
