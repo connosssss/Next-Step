@@ -75,12 +75,18 @@ xTest = scaler.transform(xTestFlat)
 linearModel = LinearRegression()
 linearModel.fit(xTrainFlat, yTrain)
 
-rfModel = RandomForestRegressor(n_estimators=1000, random_state=42,
-                                max_features=0.6, n_jobs=-1,
-                                 min_samples_leaf=3, min_samples_split=8,
-                                 max_depth=20 )
-rfModel.fit(rfXTrainFlat, rfYTrain)
-
+tscv = TimeSeriesSplit(n_splits=5)
+param_grid = {
+    "n_estimators": [200, 500, 1000],
+    "max_depth": [10, 20, None],
+    "max_features": [0.4, 0.6, "sqrt"],
+    "min_samples_split": [2, 8],
+    "min_samples_leaf": [1, 3, 5]
+}
+search = RandomizedSearchCV(RandomForestRegressor(random_state=42, n_jobs=-1),
+                            param_grid, n_iter=10, cv=tscv, scoring="r2", random_state=42)
+search.fit(rfXTrain, rfYTrain)
+rfModel = search.best_estimator_
 
 yPrediction = linearModel.predict(xTestFlat)
 rfPrediction = rfModel.predict(rfXTestFlat)
@@ -133,5 +139,5 @@ plt.xticks(rotation=45)
 plt.tight_layout()
 plt.savefig('stock_prediction.png', dpi=300, bbox_inches='tight')
 print(f"Linear R^2: {linearModel.score(xTestFlat, yTest)}")
-print(f"RF R^2: {rfModel.score(rfXTestFlat, rfYTest)}")
+print(f"RF R^2: {rfModel.score(rfXTest, rfYTest)}")
 plt.show()
