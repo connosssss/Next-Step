@@ -92,6 +92,34 @@ rfModel = search.best_estimator_
 
 yPrediction = linearModel.predict(xTestFlat)
 rfPrediction = rfModel.predict(rfXTest)
+
+
+
+yPrediction = yPrediction.flatten()
+rfPrediction = rfPrediction.flatten()
+
+linearR2 = linearModel.score(xTestFlat, yTest)
+rfR2 = rfModel.score(rfXTest, rfYTest)
+
+totalR2 = linearR2 + rfR2
+
+if totalR2 > 0:
+    linearWeight = linearR2 / totalR2
+    rfWeight = rfR2 / totalR2
+else:
+    linearWeight = 0.5
+    rfWeight = 0.5
+ 
+
+minLength = min(len(yPrediction), len(rfPrediction))
+
+yPrediction = yPrediction[:minLength]
+rfPrediction = rfPrediction[:minLength]
+yTest = yTest[:minLength]
+
+combinedPrediction = linearWeight * yPrediction + rfWeight * rfPrediction
+
+
 lastSequence = y[-length:].copy()
 futurePrediction = []
 
@@ -114,6 +142,8 @@ for i in range(futureAmount):
     newRow[3] = predRF[0] 
     rfLastSequence = np.append(rfLastSequence[1:], [newRow], axis=0)
 
+combinedFuturePrediction = [linearWeight * linear + rfWeight * rf for linear, rf in zip(futurePrediction, rfFuturePrediction)]
+
 plt.figure(figsize=(12, 6))
 plt.plot(stock.index, stock['Close'], label='Actual Price', color='blue')
 
@@ -122,24 +152,30 @@ startIndex = length + splitIndex
 endIndex = startIndex + len(yPrediction)
 if endIndex <= len(stock.index):
     test_dates = stock.index[startIndex:endIndex]
+
+    test_dates = test_dates[:minLength]
+
     plt.scatter(test_dates, yPrediction, color='red', label='Test Predictions', alpha=0.6, s=20)
     plt.scatter(test_dates, rfPrediction, color='green', label='Test Predictions', alpha=0.6, s=20)
-
-
-
-
+    plt.scatter(test_dates, combinedPrediction, color='blue', label='Combined Predictions', alpha=0.6, s=20)
 
 futureDates = pd.date_range(start=stock.index[-1] + pd.Timedelta(days=1), periods=futureAmount, freq='D')
 plt.plot(futureDates, futurePrediction, 'r--', label=f'Future Predictions', linewidth=2)
 plt.plot(futureDates, rfFuturePrediction, 'g--', label=f'Random Forest Future', linewidth=2)
+plt.plot(futureDates, combinedFuturePrediction, 'b--', label=f'Combined Future', linewidth=2)
 
-plt.title(f'{ticker} Stock Price Prediction (Sequence-based)')
+
+plt.title(f'{ticker} Stock Price Prediction (Combined Ensemble)')
 plt.xlabel('Date')
 plt.ylabel('Price ($)')
 plt.legend()
 plt.xticks(rotation=45)
 plt.tight_layout()
 plt.savefig('stock_prediction.png', dpi=300, bbox_inches='tight')
-print(f"Linear R^2: {linearModel.score(xTestFlat, yTest)}")
-print(f"RF R^2: {rfModel.score(rfXTest, rfYTest)}")
+
+
+
+print(f"Linear R^2: {linearR2}")
+print(f"RF R^2: {rfR2}")
+print(f"Linear: {linearWeight:.3f}, RF: {rfWeight:.3f}")
 plt.show()
