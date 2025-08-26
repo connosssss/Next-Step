@@ -19,6 +19,7 @@ export default function Home() {
 
     setLoading(true);
     setStockData(null);
+    setError(null);
     
     try {
       const response = await fetch(`http://localhost:5000/api/predict/${ticker}`, {
@@ -31,11 +32,14 @@ export default function Home() {
 
       });
       
+      const data = await response.json();
+      
       if (!response.ok) {
-        throw new Error(`Error: ${response.status}`);
+        setError(data.error || `Error: ${response.status}`);
+        return;
       }
       
-      const data = await response.json();
+      setStockData(data);
       
       
       setStockData(data);
@@ -43,9 +47,12 @@ export default function Home() {
     
     catch (err) {
       console.error(err);
+      setError('Network error or server unavailable');
+    } finally {
+      setLoading(false);
     }
     
-    setLoading(false);
+                    
   };
 
   return (
