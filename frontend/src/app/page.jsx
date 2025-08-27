@@ -57,12 +57,27 @@ export default function Home() {
 
   return (
     <div className="w-screen h-screen bg-emerald-400 text-black">
-      {JSON.stringify(stockData)}
+      
+    
+        <button
+          onClick={handlePredict}
+          disabled={loading}
+          className="bg-red-200 p-2"
+        >
+          {loading ? 'Loading...' : 'Predict'}
+        </button>
 
-      <button
-        onClick={handlePredict}
-        className=" bg-red-200"
-      > Test</button>
+      {error && (
+        <div className="bg-red-600">
+          <div>Error:</div> {error}
+        </div>
+      )}
+
+      
+      <div className="bg-white p-4 rounded">
+        <div className="text-xs overflow-auto">{JSON.stringify(stockData)}</div>
+      </div>
+      
     </div>
   );
 }
