@@ -23,13 +23,11 @@ export default function Home() {
     
     try {
       const response = await fetch(`http://localhost:5000/api/predict/${ticker}`, {
-
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({})
-
       });
       
       const data = await response.json();
@@ -40,19 +38,14 @@ export default function Home() {
       }
       
       setStockData(data);
-      
-      
-      setStockData(data);
     } 
-    
     catch (err) {
       console.error(err);
       setError('Network error or server unavailable');
-    } finally {
+    } 
+    finally {
       setLoading(false);
     }
-    
-                    
   };
 
   return (

@@ -8,6 +8,10 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import RandomizedSearchCV, TimeSeriesSplit
 import pandas as pd
+import time
+import signal
+import sys
+import threading
 
 import base64
 import io
@@ -16,19 +20,32 @@ import matplotlib
 matplotlib.use('Agg')  
 
 app = Flask(__name__)
-CORS(app)  
+CORS(app)
+
+activeRequests = {}
+requestLock = threading.Lock()  
 
 
 def predictPrice(ticker_symbol):
     ticker = ticker_symbol
-    stock = yf.download(ticker, period="2y")
+    
+    try:
+        stock = yf.download(ticker, period="2y", progress=False)
+        if stock.empty:
+            return {"error": f"No data found for ticker {ticker}"}
+    except Exception as e:
+        return {"error": f"Failed to download data: {str(e)}"}
+    
+    if len(stock) < 120:
+        return {"error": f"Insufficient data for {ticker}. Need at least 120 days of data."}
+    
     y = stock['Close'].values
 
     stock['Price_Range'] = stock['High'] - stock['Low']
     stock['Volume_Price'] = stock['Volume'] * stock['Close']
     stock['Adj_Close_MA3'] = stock['Close'].rolling(window=3).mean()
 
-    rfData = stock[['Open', 'High', 'Low', 'Close', 'Volume', 'Price_Range', 'Volume_Price', 'Adj_Close_MA3']].fillna(method='bfill').values
+    rfData = stock[['Open', 'High', 'Low', 'Close', 'Volume', 'Price_Range', 'Volume_Price', 'Adj_Close_MA3']].bfill().values
 
     length = 60
     futureAmount = 60 
@@ -52,7 +69,10 @@ def predictPrice(ticker_symbol):
     print(f"Sequences created: {len(sequenceX)} samples")
 
     if len(sequenceX) == 0:
-        return {"error": "Not enough data to create sequences."}
+        return {"error": f"Not enough data to create sequences for {ticker}. Need at least {length + 1} days of data."}
+    
+    if len(sequenceX) < 10:
+        return {"error": f"Insufficient sequences for reliable prediction. Only {len(sequenceX)} sequences available, need at least 10."}
 
     # splitting to training /testing sections
     splitIndex = int(len(sequenceX) * 0.7)
@@ -151,13 +171,17 @@ def predictPrice(ticker_symbol):
 
     startIndex = length + splitIndex
     endIndex = startIndex + len(yPrediction)
-    if endIndex <= len(stock.index):
-        test_dates = stock.index[startIndex:endIndex]
-        test_dates = test_dates[:minLength]
 
-        plt.scatter(test_dates, yPrediction, color='red', label='Linear Predictions', alpha=0.6, s=20)
-        plt.scatter(test_dates, rfPrediction, color='green', label='RF Predictions', alpha=0.6, s=20)
-        plt.scatter(test_dates, combinedPrediction, color='purple', label='Combined Predictions', alpha=0.6, s=20)
+    if endIndex <= len(stock.index):
+
+        testDates = stock.index[startIndex:endIndex]
+        testDates = testDates[:minLength]
+
+
+
+        plt.scatter(testDates, yPrediction, color='red', label='Linear Predictions', alpha=0.6, s=20)
+        plt.scatter(testDates, rfPrediction, color='green', label='RF Predictions', alpha=0.6, s=20)
+        plt.scatter(testDates, combinedPrediction, color='purple', label='Combined Predictions', alpha=0.6, s=20)
 
     futureDates = pd.date_range(start=stock.index[-1] + pd.Timedelta(days=1), periods=futureAmount, freq='D')
     plt.plot(futureDates, futurePrediction, 'r--', label=f'Linear Future', linewidth=2)
@@ -237,16 +261,53 @@ def predictPrice(ticker_symbol):
 
 @app.route('/api/predict/<ticker>', methods=['POST'])
 def predict_stock(ticker):
+    ticker = ticker.upper()
+    
+    with requestLock:
+        if ticker in activeRequests:
+            print(f"Request for {ticker} already in progress, waiting...")
+            event = activeRequests[ticker]
+        else:
+            activeRequests[ticker] = threading.Event()
+            event = None
+
+    if event:
+        event.wait(timeout=60)  
+        return jsonify({"error": "Request timeout or duplicate request"})
+    
     try:
-        result = predictPrice(ticker.upper())
+        print(f"Processing new request for {ticker}")
+        result = predictPrice(ticker)
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    finally:
+        with requestLock:
+            if ticker in activeRequests:
+                activeRequests[ticker].set()
+                del activeRequests[ticker]
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
     return jsonify({"status": "healthy"})
 
+def signal_handler(sig, frame):
+    print('\nShutting down gracefully...')
+    sys.exit(0)
+
 if __name__ == '__main__':
-    print("http://localhost:5000")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    print("Starting server at http://localhost:5000")
+    print("Press Ctrl+C to stop the server")
+    
+    try:
+        app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)
+
+    except KeyboardInterrupt:
+        print("\nServer stopped by user")
+    except Exception as e:
+        print(f"Server error: {e}")
+    finally:
+        print("Server CLose")
