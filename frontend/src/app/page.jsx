@@ -1,9 +1,18 @@
 'use client';
 
 import React, { useState } from 'react';
+import { Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  LineElement,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  Legend,
+  Tooltip
+} from 'chart.js';
 
-
-// Temporarily switching to javascript instead of typescript for testing purposes
+ChartJS.register(LineElement, CategoryScale, LinearScale, PointElement, Legend, Tooltip);
 
 export default function Home() {
 
@@ -11,8 +20,6 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [stockData, setStockData] = useState(null);
   const [error, setError] = useState(null);
-
-
 
   const handlePredict = async () => {
     if (loading) return;
@@ -83,6 +90,51 @@ export default function Home() {
 
       </div>
         <div className="bg-white p-4 rounded">
+          {stockData && stockData.historical_data && (
+            <Line
+              data={{
+                labels: stockData.historical_data.map(d => d.date),
+                datasets: [
+                  {
+                    label: 'Actual',
+                    data: stockData.historical_data.map(d => d.actual),
+                    borderColor: 'blue',
+                    fill: false
+                  },
+                  {
+                    label: 'Combined Prediction',
+                    data: stockData.historical_data.map(d => d.combinedPrediction),
+                    borderColor: 'purple',
+                    fill: false
+                  },
+                  {
+                    label: 'Linear Prediction',
+                    data: stockData.historical_data.map(d => d.linearPrediction),
+                    borderColor: 'red',
+                    fill: false
+                  },
+                  {
+                    label: 'Random Forest Prediction',
+                    data: stockData.historical_data.map(d => d.rfPrediction),
+                    borderColor: 'green',
+                    fill: false
+                  }
+                ]
+              }}
+
+              options={{
+                responsive: true,
+                plugins: {
+                  legend: { display: true }
+                },
+
+                scales: {
+                  x: { display: true },
+                  y: { display: true }
+                }
+              }}
+            />
+          )}
           <div className="text-xs overflow-auto">{JSON.stringify(stockData)}</div>
         </div>
       
