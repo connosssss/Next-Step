@@ -23,18 +23,40 @@ app = Flask(__name__)
 CORS(app)
 
 activeRequests = {}
-requestLock = threading.Lock()  
+requestLock = threading.Lock()
 
 
 def predictPrice(ticker_symbol):
     ticker = ticker_symbol
     
     try:
-        stock = yf.download(ticker, period="2y", progress=False)
-        if stock.empty:
-            return {"error": f"No data found for ticker {ticker}"}
+        max_retries = 5
+        stock = None
+        
+        for attempt in range(max_retries):
+            try:
+                print(f"Attempt {attempt + 1} to download")
+                stock = yf.download(ticker, period="2y", progress=False, auto_adjust=True, threads=False)
+                if not stock.empty:
+                    print(f"Successfully downloaded {ticker} data on attempt {attempt + 1}")
+                    break
+                else:
+                    print(f"No data returned on attempt {attempt + 1}")
+            except Exception as e:
+                error_msg = str(e)
+                print(f"Error on attempt {attempt + 1}: {error_msg}")
+                
+        
+        if stock is None or stock.empty:
+            return {"error": f"No data found for ticker {ticker}. Please check the ticker symbol."}
+            
     except Exception as e:
-        return {"error": f"Failed to download data: {str(e)}"}
+        error_msg = str(e)
+        print(f"Final error for {ticker}: {error_msg}")
+        if any(phrase in error_msg.lower() for phrase in ["rate limit", "too many requests", "429"]):
+            return {"error": f"Rate limit Reached"}
+        return {"error": f"Failed to download data: {error_msg}"}
+    
     
     if len(stock) < 120:
         return {"error": f"Insufficient data for {ticker}. Need at least 120 days of data."}
@@ -43,9 +65,9 @@ def predictPrice(ticker_symbol):
 
     stock['Price_Range'] = stock['High'] - stock['Low']
     stock['Volume_Price'] = stock['Volume'] * stock['Close']
-    stock['Adj_Close_MA3'] = stock['Close'].rolling(window=3).mean()
+    stock['adjCloseMA3'] = stock['Close'].rolling(window=3).mean()
 
-    rfData = stock[['Open', 'High', 'Low', 'Close', 'Volume', 'Price_Range', 'Volume_Price', 'Adj_Close_MA3']].bfill().values
+    rfData = stock[['Open', 'High', 'Low', 'Close', 'Volume', 'Price_Range', 'Volume_Price', 'adjCloseMA3']].bfill().values
 
     length = 60
     futureAmount = 60 
@@ -272,14 +294,18 @@ def predict_stock(ticker):
             event = None
 
     if event:
-        event.wait(timeout=60)  
-        return jsonify({"error": "Request timeout or duplicate request"})
+        event.wait(timeout=120)  
+        with requestLock:
+            if ticker in activeRequests:
+                del activeRequests[ticker]
+        return jsonify({"error": "Request timeout - another request for this ticker is still processing"})
     
     try:
         print(f"Processing new request for {ticker}")
         result = predictPrice(ticker)
         return jsonify(result)
     except Exception as e:
+        print(f"Error processing {ticker}: {str(e)}")
         return jsonify({"error": str(e)}), 500
     finally:
         with requestLock:
@@ -292,7 +318,10 @@ def health_check():
     return jsonify({"status": "healthy"})
 
 def signal_handler(sig, frame):
-    print('\nShutting down gracefully...')
+    with requestLock:
+        for event in activeRequests.values():
+            event.set()
+        activeRequests.clear()
     sys.exit(0)
 
 if __name__ == '__main__':
@@ -300,14 +329,14 @@ if __name__ == '__main__':
     signal.signal(signal.SIGTERM, signal_handler)
     
     print("Starting server at http://localhost:5000")
-    print("Press Ctrl+C to stop the server")
+
     
     try:
-        app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)
+        app.run(debug=False, host='0.0.0.0', port=5000, threaded=True, use_reloader=False)
 
     except KeyboardInterrupt:
         print("\nServer stopped by user")
     except Exception as e:
         print(f"Server error: {e}")
     finally:
-        print("Server CLose")
+        print("Server closed")
