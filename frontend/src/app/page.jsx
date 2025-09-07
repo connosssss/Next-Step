@@ -83,7 +83,7 @@ export default function Home() {
         )}
 
       {error && (
-          <div className="bg-red-600">
+          <div className="bg-red-200/60 text-lg text-red-400/80 font-bold p-2 rounded-lg">
             <div>Error:</div> {error}
           </div>
         )}

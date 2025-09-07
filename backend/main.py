@@ -12,6 +12,8 @@ import time
 import signal
 import sys
 import threading
+import requests
+import random
 
 import base64
 import io
@@ -26,40 +28,121 @@ activeRequests = {}
 requestLock = threading.Lock()
 
 
+session = requests.Session()
+session.headers.update({
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+})
+
+def getStockData(ticker_symbol, period="2y"):
+
+    # imn trying everything to get it to stop rate limit hitting
+    ticker = ticker_symbol.upper()
+    
+  
+    def try_yfinance():
+        try:
+            stockObj = yf.Ticker(ticker, session=session)
+       
+            time.sleep(random.uniform(1, 3))
+            
+        
+            data = stockObj.history(period=period, auto_adjust=True, timeout=30)
+            
+            if not data.empty:
+                print(f"yfinance worked")
+                return data
+            
+        except Exception as e:
+            print(f"yfinance failed: {str(e)}")
+            return None
+
+    def try_yahoo_direct():
+        try:
+            time.sleep(random.uniform(2, 4))
+            
+            import datetime
+            endTime = int(datetime.datetime.now().timestamp())
+            startTime = int((datetime.datetime.now() - datetime.timedelta(days=730)).timestamp())
+            
+            url = f"https://query1.finance.yahoo.com/v7/finance/download/{ticker}"
+
+            params = {
+                'period1': startTime,
+                'period2': endTime,
+                'interval': '1d',
+                'events': 'history',
+                'includeAdjustedClose': 'true'
+            }
+            
+            response = session.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            
+            from io import StringIO
+            data = pd.read_csv(StringIO(response.text), index_col='Date', parse_dates=True)
+            
+            if not data.empty:
+                data.columns = ['Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume']
+                data = data.drop('Adj Close', axis=1)  
+                print(f"Yahoo direct worked and formatted as yfinancde")
+                return data
+                
+        except Exception as e:
+            print(f"Yahoo direct API failed: {str(e)}")
+            return None
+
+    def try_pandas_datareader():
+        try:
+            import pandas_datareader as pdr
+            from datetime import datetime, timedelta
+            
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=730)
+            
+            time.sleep(random.uniform(1, 2))
+            
+            data = pdr.get_data_yahoo(ticker, start=start_date, end=end_date, session=session)
+            
+            if not data.empty:
+                print(f"Successfully retrieved {ticker} data via pandas-datareader")
+                return data
+                
+        except Exception as e:
+            print(f"pandas-datareader failed: {str(e)}")
+            return None
+    
+    methods = [try_yfinance, try_yahoo_direct, try_pandas_datareader]
+    
+    for i, method in enumerate(methods, 1):
+        try:
+            data = method()
+            if data is not None and not data.empty and len(data) > 120:
+                return data
+            else:
+                print(f"Method {i} failed")
+        except Exception as e:
+            print(f"Method {i} failed with exception: {str(e)}")
+    
+    return None
+
 def predictPrice(ticker_symbol):
-    ticker = ticker_symbol
+    ticker = ticker_symbol.upper()
     
     try:
-        max_retries = 5
-        stock = None
-        
-        for attempt in range(max_retries):
-            try:
-                print(f"Attempt {attempt + 1} to download")
-                stock = yf.download(ticker, period="2y", progress=False, auto_adjust=True, threads=False)
-                if not stock.empty:
-                    print(f"Successfully downloaded {ticker} data on attempt {attempt + 1}")
-                    break
-                else:
-                    print(f"No data returned on attempt {attempt + 1}")
-            except Exception as e:
-                error_msg = str(e)
-                print(f"Error on attempt {attempt + 1}: {error_msg}")
-                
+        print(f"Starting data retrieval for {ticker}")
+        stock = getStockData(ticker)
         
         if stock is None or stock.empty:
-            return {"error": f"No data found for ticker {ticker}. Please check the ticker symbol."}
+            return {"error": f"Unable to retrieve data for ticker {ticker} from any source"}
+            
+        print(f"Retrieved {len(stock)} days of data for {ticker}")
             
     except Exception as e:
         error_msg = str(e)
         print(f"Final error for {ticker}: {error_msg}")
-        if any(phrase in error_msg.lower() for phrase in ["rate limit", "too many requests", "429"]):
-            return {"error": f"Rate limit Reached"}
-        return {"error": f"Failed to download data: {error_msg}"}
-    
+        return {"error": f"Failed to retrieve data: {error_msg}"}
     
     if len(stock) < 120:
-        return {"error": f"Insufficient data for {ticker}. Need at least 120 days of data."}
+        return {"error": f"Insufficient data for {ticker}. Need at least 120 days of data n got {len(stock)} days"}
     
     y = stock['Close'].values
 
@@ -230,18 +313,12 @@ def predictPrice(ticker_symbol):
     print(f"RF R^2: {rfR2}")
     print(f"Linear: {linearWeight:.3f}, RF: {rfWeight:.3f}")
 
-
-
-
-
-    
-
     testStartIndex = length + splitIndex
     testDatesList = stock.index[testStartIndex:testStartIndex + minLength]
     
-    historical_data = []
+    historicalData = []
     for i, date in enumerate(testDatesList):
-        historical_data.append({
+        historicalData.append({
             "date": date.strftime('%Y-%m-%d'),
             "actual": float(yTest[i]),
             "linearPrediction": float(yPrediction[i]),
@@ -265,7 +342,7 @@ def predictPrice(ticker_symbol):
     
     return {
         "ticker": ticker,
-        "historical_data": historical_data,
+        "historicalData": historicalData,
         "futurePredictions": futurePredictions,
 
         "metrics": {
