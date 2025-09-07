@@ -56,7 +56,7 @@ export default function Home() {
   };
 
   return (
-    <div className="w-screen h-screen bg-emerald-300 text-emerald-700">
+    <div className="w-screen min-h-screen h-full bg-emerald-300 text-emerald-700">
       <div className='p-12'>
       <h1 className='text-5xl font-bold '>Next Step</h1>
       <p className='text-xl py-6 w-1/3 font-semibold'> A stock market predictor that uses sckit to make linear regression and 
@@ -89,33 +89,36 @@ export default function Home() {
         )}
 
       </div>
-        <div className="bg-white p-4 rounded">
-          {stockData && stockData.historical_data && (
+        <div className="p-4 rounded">
+          {stockData && stockData.historicalData && (
+            <div className='flex flex-col text-center text-4xl w-full font-bold'>
+              Training on Past Data
             <Line
+              className='rounded-xl bg-emerald-200 p-10 mt-5 mb-12'
               data={{
-                labels: stockData.historical_data.map(d => d.date),
+                labels: stockData.historicalData.map(d => d.date),
                 datasets: [
                   {
                     label: 'Actual',
-                    data: stockData.historical_data.map(d => d.actual),
+                    data: stockData.historicalData.map(d => d.actual),
                     borderColor: 'blue',
                     fill: false
                   },
                   {
                     label: 'Combined Prediction',
-                    data: stockData.historical_data.map(d => d.combinedPrediction),
+                    data: stockData.historicalData.map(d => d.combinedPrediction),
                     borderColor: 'purple',
                     fill: false
                   },
                   {
                     label: 'Linear Prediction',
-                    data: stockData.historical_data.map(d => d.linearPrediction),
+                    data: stockData.historicalData.map(d => d.linearPrediction),
                     borderColor: 'red',
                     fill: false
                   },
                   {
                     label: 'Random Forest Prediction',
-                    data: stockData.historical_data.map(d => d.rfPrediction),
+                    data: stockData.historicalData.map(d => d.rfPrediction),
                     borderColor: 'green',
                     fill: false
                   }
@@ -134,8 +137,48 @@ export default function Home() {
                 }
               }}
             />
+            Future Predictions
+            <Line
+            className='rounded-xl bg-emerald-200 p-10 mt-5'
+              data={{
+                labels: stockData.futurePredictions.map(d => d.date),
+                datasets: [
+                  {
+                    label: 'Combined Prediction',
+                    data: stockData.futurePredictions.map(d => d.combinedPrediction),
+                    borderColor: 'purple',
+                    fill: false
+                  },
+                  {
+                    label: 'Linear Prediction',
+                    data: stockData.futurePredictions.map(d => d.linearPrediction),
+                    borderColor: 'red',
+                    fill: false
+                  },
+                  {
+                    label: 'Random Forest Prediction',
+                    data: stockData.futurePredictions.map(d => d.rfPrediction),
+                    borderColor: 'green',
+                    fill: false
+                  }
+                ]
+              }}
+
+              options={{
+                responsive: true,
+                plugins: {
+                  legend: { display: true }
+                },
+
+                scales: {
+                  x: { display: true },
+                  y: { display: true }
+                }
+              }}
+            />
+            </div>
           )}
-          <div className="text-xs overflow-auto">{JSON.stringify(stockData)}</div>
+          
         </div>
       
       </div>
