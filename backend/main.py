@@ -33,6 +33,19 @@ session.headers.update({
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 })
 
+def getParameters(requestData):
+
+    return {
+        'sequenceLength': requestData.get('sequenceLength', 60),
+        'futureDays': requestData.get('futureDays', 60),
+        'trainSplit': requestData.get('trainSplit', 0.7),
+        'nEstimators': requestData.get('nEstimators', 500),
+        'maxDepth': requestData.get('maxDepth', 20),
+        'maxFeatures': requestData.get('maxFeatures', 0.6),
+        'minSamplesSplit': requestData.get('minSamplesSplit', 2),
+        'minSamplesLeaf': requestData.get('minSamplesLeaf', 1)
+    }
+
 def getStockData(ticker_symbol, period="2y"):
 
     # imn trying everything to get it to stop rate limit hitting
@@ -124,8 +137,23 @@ def getStockData(ticker_symbol, period="2y"):
     
     return None
 
-def predictPrice(ticker_symbol):
+def predictPrice(ticker_symbol, params=None):
     ticker = ticker_symbol.upper()
+
+    if params is None:
+        params = {
+            'sequenceLength': 60,
+            'futureDays': 60,
+            'trainSplit': 0.7,
+            'nEstimators': 500,
+            'maxDepth': 20,
+            'maxFeatures': 0.6,
+            'minSamplesSplit': 2,
+            'minSamplesLeaf': 1
+        }
+    
+    length = params['sequenceLength']
+    futureAmount = params['futureDays']
     
     try:
         print(f"Starting data retrieval for {ticker}")
@@ -152,9 +180,6 @@ def predictPrice(ticker_symbol):
 
     rfData = stock[['Open', 'High', 'Low', 'Close', 'Volume', 'Price_Range', 'Volume_Price', 'adjCloseMA3']].bfill().values
 
-    length = 60
-    futureAmount = 60 
-
     def createSequences(data, length=60):
         X, y = [], []
         for i in range(length, len(data)):
@@ -162,7 +187,7 @@ def predictPrice(ticker_symbol):
             y.append(data[i])
         return np.array(X), np.array(y)
 
-    def createRFSequences(data, target, length=60):
+    def createRfSequences(data, target, length=60):
         X, y = [], []
         for i in range(length, len(data)):
             X.append(data[i-length:i])
@@ -170,7 +195,7 @@ def predictPrice(ticker_symbol):
         return np.array(X), np.array(y)
 
     sequenceX, sequenceY = createSequences(y, length)
-    rfSequenceX, rfSequenceY = createRFSequences(rfData, y, length)
+    rfSequenceX, rfSequenceY = createRfSequences(rfData, y, length)
     print(f"Sequences created: {len(sequenceX)} samples")
 
     if len(sequenceX) == 0:
@@ -180,7 +205,7 @@ def predictPrice(ticker_symbol):
         return {"error": f"Insufficient sequences for reliable prediction. Only {len(sequenceX)} sequences available, need at least 10."}
 
     # splitting to training /testing sections
-    splitIndex = int(len(sequenceX) * 0.7)
+    splitIndex = int(len(sequenceX) * params['trainSplit'])
     xTrain, xTest = sequenceX[:splitIndex], sequenceX[splitIndex:]
     yTrain, yTest = sequenceY[:splitIndex], sequenceY[splitIndex:]
 
@@ -208,14 +233,14 @@ def predictPrice(ticker_symbol):
 
     tscv = TimeSeriesSplit(n_splits=5)
     param_grid = {
-        "n_estimators": [200, 500, 1000],
-        "max_depth": [10, 20, None],
-        "max_features": [0.4, 0.6, "sqrt"],
-        "min_samples_split": [2, 8],
-        "min_samples_leaf": [1, 3, 5]
+        "n_estimators": [params['nEstimators']],
+        "max_depth": [params['maxDepth'] if params['maxDepth'] > 0 else None],
+        "max_features": [params['maxFeatures']],
+        "min_samples_split": [params['minSamplesSplit']],
+        "min_samples_leaf": [params['minSamplesLeaf']]
     }
     search = RandomizedSearchCV(RandomForestRegressor(random_state=42, n_jobs=-1),
-                                param_grid, n_iter=10, cv=tscv, scoring="r2", random_state=42)
+                                param_grid, n_iter=1, cv=tscv, scoring="r2", random_state=42)
     search.fit(rfXTrain, rfYTrain)
     rfModel = search.best_estimator_
 
@@ -306,7 +331,7 @@ def predictPrice(ticker_symbol):
     plt.savefig(imgBuffer, format='png', dpi=300, bbox_inches='tight')
     imgBuffer.seek(0)
 
-    chart_base64 = base64.b64encode(imgBuffer.getvalue()).decode()
+    chartBase64 = base64.b64encode(imgBuffer.getvalue()).decode()
     plt.close()  
 
     print(f"Linear R^2: {linearR2}")
@@ -352,7 +377,7 @@ def predictPrice(ticker_symbol):
             "rfWeight": float(rfWeight)
         },
 
-        "chart": chart_base64
+        "chart": chartBase64
     }
 
 
@@ -361,6 +386,9 @@ def predictPrice(ticker_symbol):
 @app.route('/api/predict/<ticker>', methods=['POST'])
 def predict_stock(ticker):
     ticker = ticker.upper()
+
+    requestData = request.get_json() or {}
+    params = getParameters(requestData)
     
     with requestLock:
         if ticker in activeRequests:
@@ -378,8 +406,8 @@ def predict_stock(ticker):
         return jsonify({"error": "Request timeout - another request for this ticker is still processing"})
     
     try:
-        print(f"Processing new request for {ticker}")
-        result = predictPrice(ticker)
+        print(f"Processing new request for {ticker} with params: {params}")
+        result = predictPrice(ticker, params)
         return jsonify(result)
     except Exception as e:
         print(f"Error processing {ticker}: {str(e)}")
