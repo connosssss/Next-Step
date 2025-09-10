@@ -99,7 +99,7 @@ export default function Home() {
 
         <button
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className="bg-emerald-100/70 px-4 py-2 text-xl font-bold rounded-xl"
+          className="bg-emerald-100/70 px-4 py-2 text-xl font-bold rounded-xl min-w-45"
         >
           {showAdvanced ? 'Hide' : 'Show'} Settings
         </button>
@@ -361,12 +361,13 @@ export default function Home() {
             
             {stockData.metrics && (
               <div className="text-lg mt-6 bg-emerald-100/50 p-4 rounded-lg">
-                <div className="grid grid-cols-2 gap-4 text-left">
-                  <div>Linear R²: {stockData.metrics.linearR2.toFixed(4)}</div>
-                  <div>Random Forest R²: {stockData.metrics.rfR2.toFixed(4)}</div>
-                  <div>Linear Weight: {stockData.metrics.linearWeight.toFixed(3)* 100 + " "} %</div>
-                  <div>RF Weight: {stockData.metrics.rfWeight.toFixed(3) * 100 + " "} %</div>
+                <div className="grid grid-cols-2 gap-4 text-center">
+                  <div className='w-full '>Linear R²: {stockData.metrics.linearR2.toFixed(4)}</div>
+                  <div className='w-full '>Random Forest R²: {stockData.metrics.rfR2.toFixed(4)}</div>
+                  <div className='w-full '>Linear Weight: {stockData.metrics.linearWeight.toFixed(3)* 100 + " "} %</div>
+                  <div className='w-full '>RF Weight: {stockData.metrics.rfWeight.toFixed(3) * 100 + " "} %</div>
                 </div>
+                <div className=' mt-3'>  R^2 is going to be the accuracy of the model, with an R^2 closer to 1 being more accurate, and closer to or less than 0 as less accurate</div>
               </div>
             )}
             </div>
